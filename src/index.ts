@@ -1,18 +1,28 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.toml`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+// src/index.ts
+
+enum OctomailerWorkerOutcome {
+	success,
+	failure,
+	rejected
+}
 
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
+	async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<OctomailerWorkerOutcome> {
+		try {
+			switch (message.to) {
+				case "feedback@afiexplorer.com":
+					await fetch("https://octogram/api", {
+						body: `What is up homie? From ${message.from}, with subject of :${message.headers.get('subject')}`
+					});
+					await message.forward("w_walker@icloud.com");
+					return OctomailerWorkerOutcome.success
+				default:
+					message.setReject("Unkown address")
+					return OctomailerWorkerOutcome.rejected
+			}
+		} catch (e: any) {
+			console.log(e.message) // errors
+			return OctomailerWorkerOutcome.failure
+		}
 	},
 };
