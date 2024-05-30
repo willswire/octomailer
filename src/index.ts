@@ -3,7 +3,8 @@
 enum OctomailerWorkerOutcome {
 	success,
 	failure,
-	rejected
+	rejected,
+	fallback
 }
 
 export default {
@@ -32,7 +33,8 @@ export default {
 				});
 
 				if (!response.ok) {
-					throw new Error(`GitHub API response status: ${response.status}`);
+					const errorBody = await response.json();
+					throw new Error(`GitHub API response status: ${response.status}, message: ${errorBody}`);
 				}
 
 				return OctomailerWorkerOutcome.success;
@@ -41,7 +43,13 @@ export default {
 				return OctomailerWorkerOutcome.rejected;
 			}
 		} catch (e: any) {
-			console.log(e.message);
+			console.log(`Error: ${e.message}`);
+			try {
+				await message.forward("w_walker@icloud.com");
+				return OctomailerWorkerOutcome.fallback;
+			} catch (forwardError: any) {
+				console.log(`Forwarding error: ${forwardError.message}`);
+			}
 			return OctomailerWorkerOutcome.failure;
 		}
 	},
