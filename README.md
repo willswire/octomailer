@@ -42,7 +42,7 @@ Octomailer is a project that creates GitHub issues from emails using Cloudflare 
 The following scripts are available in the project:
 
 - **Deploy**: Deploy the project to Cloudflare Workers.
-  
+
   ```sh
   npm run deploy
   ```
