@@ -1,5 +1,5 @@
 // test/index.spec.ts
-import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
+import { env, createExecutionContext, waitOnExecutionContext, SELF, fetchMock } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
 import worker from '../src/index';
 
@@ -31,7 +31,7 @@ describe('Octomailer worker', () => {
 		expect(result).toMatchInlineSnapshot(OctomailerWorkerOutcome.rejected);
 	});
 
-	it('forwards a good email', async () => {
+	it('creates an issue from a good email', async () => {
 		let goodEmail: ForwardableEmailMessage = {
 			from: "test@willswire.com",
 			to: "feedback@afiexplorer.com",
@@ -49,6 +49,6 @@ describe('Octomailer worker', () => {
 		const ctx = createExecutionContext();
 		const result = await worker.email(goodEmail, env, ctx);
 		await waitOnExecutionContext(ctx);
-		expect(result).toMatchInlineSnapshot(OctomailerWorkerOutcome.rejected);
+		expect(result).toMatchInlineSnapshot(OctomailerWorkerOutcome.success);
 	});
 });

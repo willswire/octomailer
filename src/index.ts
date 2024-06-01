@@ -1,56 +1,65 @@
 // src/index.ts
+import { Octokit } from "@octokit/core";
 
-enum OctomailerWorkerOutcome {
-	success,
-	failure,
-	rejected,
-	fallback
+async function streamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let result = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    result += decoder.decode(value, { stream: true });
+  }
+
+  result += decoder.decode();
+  return result;
+}
+
+async function createIssue(message: ForwardableEmailMessage, env: Env, octokit: Octokit): Promise<void> {
+  let messageTitle: string;
+  let messageBody: string;
+
+  try {
+    messageTitle = message.headers.get('subject') || "User feedback";
+    messageBody = await streamToText(message.raw);
+  } catch (error) {
+    throw new CreateIssueError("Unable to parse email message contents", error as any);
+  }
+
+  try {
+    await octokit.request('POST /repos/{owner}/{repo}/issues', {
+      owner: env.GITHUB_USERNAME,
+      repo: env.GITHUB_REPO,
+      title: messageTitle,
+      body: messageBody,
+      labels: [
+        'feedback'
+      ],
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+    console.log('Issue created successfully');
+  } catch (error) {
+    throw new CreateIssueError("Unable to create GitHub issue", error as any);
+  }
 }
 
 export default {
-	async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<OctomailerWorkerOutcome> {
-		try {
-			const user = env.GITHUB_USERNAME;
-			const repo = env.GITHUB_REPO;
-			const token = env.GITHUB_TOKEN;
+  async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
+    const user = env.GITHUB_USERNAME;
+    const repo = env.GITHUB_REPO;
+    const token = env.GITHUB_TOKEN;
 
-			if (message.to === "feedback@afiexplorer.com") {
-				const issueTitle = message.headers.get('subject');
-				const issueBody = `Email from: ${message.from}\n\n${message.raw}`;
+    if (!user || !repo || !token) {
+      throw new MissingEnvVariablesError();
+    }
 
-				// Create GitHub issue
-				const response = await fetch(`https://api.github.com/repos/${user}/${repo}/issues`, {
-					method: 'POST',
-					headers: {
-						'Authorization': `token ${token}`,
-						'Accept': 'application/vnd.github.v3+json',
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify({
-						title: issueTitle,
-						body: issueBody
-					})
-				});
+    const octokit = new Octokit({
+      auth: token
+    });
 
-				if (!response.ok) {
-					const errorBody = await response.json();
-					throw new Error(`GitHub API response status: ${response.status}, message: ${errorBody}`);
-				}
-
-				return OctomailerWorkerOutcome.success;
-			} else {
-				message.setReject("Unknown address");
-				return OctomailerWorkerOutcome.rejected;
-			}
-		} catch (e: any) {
-			console.log(`Error: ${e.message}`);
-			try {
-				await message.forward("w_walker@icloud.com");
-				return OctomailerWorkerOutcome.fallback;
-			} catch (forwardError: any) {
-				console.log(`Forwarding error: ${forwardError.message}`);
-			}
-			return OctomailerWorkerOutcome.failure;
-		}
-	},
+    return createIssue(message, env, octokit);
+  }
 };
